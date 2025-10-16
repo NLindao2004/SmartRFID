@@ -1,0 +1,59 @@
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Dependencias de Node.js (si usas backend con Node)
+node_modules/
+npm-debug.log*
+
+# Archivos de entorno
+.env
+.env.local
+.env.production
+
+# Archivos temporales
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Archivos de base de datos locales
+*.db
+*.sqlite
+*.sqlite3
+
+# Archivos de certificados
+*.pem
+*.key
+*.crt
+
+# Flutter específico
+frontend/smartrfid_app/build/
+frontend/smartrfid_app/.dart_tool/
+frontend/smartrfid_app/.flutter-plugins
+frontend/smartrfid_app/.flutter-plugins-dependencies
+frontend/smartrfid_app/.packages
+frontend/smartrfid_app/.pub-cache/
+frontend/smartrfid_app/.pub/
+frontend/smartrfid_app/android/app/*.jks
+frontend/smartrfid_app/android/key.properties
+frontend/smartrfid_app/ios/Runner.xcworkspace/xcuserdata/
+frontend/smartrfid_app/macos/Runner.xcworkspace/xcuserdata/
+frontend/smartrfid_app/.metadata
+frontend/smartrfid_app/.flutter-plugins-dependencies
+
+# Archivos compilados
+*.class
+*.jar
+*.war
+*.ear
+*.dex
+*.ap_
+*.aab
