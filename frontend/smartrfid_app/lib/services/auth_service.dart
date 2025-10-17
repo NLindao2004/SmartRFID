@@ -8,336 +8,187 @@ class AuthService {
   static const String _tokenKey = 'auth_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userKey = 'user_data';
-  static const String _lastLoginKey = 'last_login';
 
   final ApiService _apiService = ApiService();
-  
-  User? _currentUser;
-  bool _isAuthenticated = false;
 
-  // Singleton pattern
-  static final AuthService _instance = AuthService._internal();
-  factory AuthService() => _instance;
-  AuthService._internal();
+  User? _currentUser;
+  String? _currentToken;
+  bool _isAuthenticated = false;
 
   // Getters
   User? get currentUser => _currentUser;
   bool get isAuthenticated => _isAuthenticated;
-  String? get currentUserRole => _currentUser?.role.toString().split('.').last;
+  String? get token => _currentToken;
 
-  // Inicializar servicio (verificar tokens guardados)
-  Future<bool> initialize() async {
+  // Inicializar el servicio
+  Future<void> initialize() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString(_tokenKey);
-      final refreshToken = prefs.getString(_refreshTokenKey);
+
+      // Verificar sesión guardada
       final userData = prefs.getString(_userKey);
+      final token = prefs.getString(_tokenKey);
 
-      if (token != null && refreshToken != null && userData != null) {
-        _apiService.setAuthTokens(token, refreshToken);
-        
-        try {
-          final userMap = jsonDecode(userData) as Map<String, dynamic>;
-          _currentUser = User.fromJson(userMap);
-          _isAuthenticated = true;
+      if (userData != null && token != null) {
+        _currentUser = User.fromJson(jsonDecode(userData));
+        _currentToken = token;
+        _isAuthenticated = true;
 
-          // Verificar si el token sigue siendo válido
-          final isValid = await _validateToken();
-          if (!isValid) {
-            await logout();
-            return false;
-          }
-
-          return true;
-        } catch (e) {
-          debugPrint('Error parsing saved user data: $e');
-          await logout();
-        }
+        debugPrint('✅ Sesión restaurada: ${_currentUser?.username}');
+      } else {
+        debugPrint('❌ No hay sesión guardada');
       }
     } catch (e) {
-      debugPrint('Error initializing auth service: $e');
+      debugPrint('❌ Error inicializando auth: $e');
     }
-
-    return false;
   }
 
-  // Login
-  Future<AuthResult> login(String username, String password) async {
+  // Login - Para web usaremos usuarios hardcodeados
+  Future<User?> login(String username, String password) async {
     try {
-      final response = await _apiService.post<Map<String, dynamic>>(
-        '/auth/login',
-        body: {
-          'username': username,
-          'password': password,
-          'device_info': await _getDeviceInfo(),
-        },
-      );
+      debugPrint('🔐 Intentando login: $username');
 
-      if (response.isSuccess && response.data != null) {
-        final data = response.data!;
-        
-        final token = data['access_token'] as String;
-        final refreshToken = data['refresh_token'] as String;
-        final userData = data['user'] as Map<String, dynamic>;
+      // Usuarios hardcodeados para desarrollo web
+      final users = _getHardcodedUsers();
 
-        // Guardar tokens y datos del usuario
-        await _saveAuthData(token, refreshToken, userData);
+      for (final userData in users) {
+        if (userData['username'] == username &&
+            _verifyPassword(password, userData['password_hash'])) {
 
-        _currentUser = User.fromJson(userData);
-        _isAuthenticated = true;
-        _apiService.setAuthTokens(token, refreshToken);
+          final user = User.fromDatabaseJson(userData);
+          _currentUser = user;
+          _isAuthenticated = true;
 
-        return AuthResult.success(_currentUser!);
-      } else {
-        return AuthResult.failure(response.error ?? 'Error de autenticación');
+          // Generar token para desarrollo
+          _currentToken = 'web_token_${user.id}_${DateTime.now().millisecondsSinceEpoch}';
+
+          // Guardar sesión
+          await _saveSession(user, _currentToken!);
+
+          debugPrint('✅ Login exitoso: ${user.username}');
+          return user;
+        }
       }
+
+      debugPrint('❌ Credenciales incorrectas');
+      return null;
+
     } catch (e) {
-      debugPrint('Login error: $e');
-      return AuthResult.failure('Error de conexión');
+      debugPrint('❌ Error en login: $e');
+      return null;
     }
+  }
+
+  // Usuarios hardcodeados para web
+  List<Map<String, dynamic>> _getHardcodedUsers() {
+    final now = DateTime.now().toIso8601String();
+
+    return [
+      {
+        'uuid': 'admin-uuid-123',
+        'username': 'admin',
+        'email': 'admin@massline.com',
+        'first_name': 'Administrador',
+        'last_name': 'Sistema',
+        'password_hash': _hashPassword('admin123'),
+        'role': 'ADMIN',
+        'permissions': '["inventory_read","inventory_write","reports","user_management","rfid_commission"]',
+        'is_active': 1,
+        'created_at': now,
+        'updated_at': now,
+      },
+      {
+        'uuid': 'operator-uuid-456',
+        'username': 'operator',
+        'email': 'operator@massline.com',
+        'first_name': 'Operador',
+        'last_name': 'Bodega',
+        'password_hash': _hashPassword('operator123'),
+        'role': 'OPERATOR',
+        'permissions': '["inventory_read","inventory_write"]',
+        'is_active': 1,
+        'created_at': now,
+        'updated_at': now,
+      },
+    ];
+  }
+
+  // Verificar contraseña
+  bool _verifyPassword(String password, String hash) {
+    return _hashPassword(password) == hash;
+  }
+
+  // Hash simple para desarrollo
+  String _hashPassword(String password) {
+    return password.hashCode.toString();
   }
 
   // Logout
   Future<void> logout() async {
     try {
-      // Notificar al servidor (opcional)
-      await _apiService.post('/auth/logout');
-    } catch (e) {
-      debugPrint('Logout API error: $e');
-    } finally {
+      final prefs = await SharedPreferences.getInstance();
+
       // Limpiar datos locales
-      await _clearAuthData();
+      await prefs.remove(_userKey);
+      await prefs.remove(_tokenKey);
+      await prefs.remove(_refreshTokenKey);
+
+      // Limpiar estado
       _currentUser = null;
+      _currentToken = null;
       _isAuthenticated = false;
-      _apiService.clearAuthTokens();
-    }
-  }
 
-  // Cambiar contraseña
-  Future<AuthResult> changePassword(
-    String currentPassword,
-    String newPassword,
-  ) async {
-    if (!_isAuthenticated) {
-      return AuthResult.failure('Usuario no autenticado');
-    }
-
-    try {
-      final response = await _apiService.put<Map<String, dynamic>>(
-        '/auth/change-password',
-        body: {
-          'current_password': currentPassword,
-          'new_password': newPassword,
-        },
-      );
-
-      if (response.isSuccess) {
-        return AuthResult.success(_currentUser!);
-      } else {
-        return AuthResult.failure(
-          response.error ?? 'Error cambiando contraseña',
-        );
-      }
+      debugPrint('✅ Logout exitoso');
     } catch (e) {
-      debugPrint('Change password error: $e');
-      return AuthResult.failure('Error de conexión');
+      debugPrint('❌ Error en logout: $e');
     }
   }
 
-  // Validar token actual
-  Future<bool> _validateToken() async {
-    try {
-      final response = await _apiService.get<Map<String, dynamic>>('/auth/validate');
-      return response.isSuccess;
-    } catch (e) {
-      debugPrint('Token validation error: $e');
-      return false;
-    }
-  }
-
-  // Refrescar token automáticamente
-  Future<bool> refreshToken() async {
-    try {
-      final success = await _apiService.refreshAuthToken();
-      if (success) {
-        // Actualizar tokens guardados
-        final prefs = await SharedPreferences.getInstance();
-        // Los tokens ya están actualizados en ApiService
-        // Solo necesitamos guardarlos
-        return true;
-      }
-    } catch (e) {
-      debugPrint('Token refresh error: $e');
-    }
-    
-    return false;
-  }
-
-  // Verificar permisos de usuario
-  bool hasPermission(String permission) {
-    if (!_isAuthenticated || _currentUser == null) return false;
-    
-    return _currentUser!.permissions.contains(permission);
-  }
-
-  // Verificar rol de usuario
-  bool hasRole(UserRole role) {
-    if (!_isAuthenticated || _currentUser == null) return false;
-    
-    return _currentUser!.role == role;
-  }
-
-  // Verificar múltiples roles
-  bool hasAnyRole(List<UserRole> roles) {
-    if (!_isAuthenticated || _currentUser == null) return false;
-    
-    return roles.contains(_currentUser!.role);
-  }
-
-  // Obtener usuario actual actualizado del servidor
+  // ✅ Método getCurrentUser que necesitan las pantallas
   Future<User?> getCurrentUser() async {
-    if (!_isAuthenticated) return null;
+    if (_currentUser != null) {
+      return _currentUser;
+    }
 
+    // Intentar cargar desde SharedPreferences
     try {
-      final response = await _apiService.get<Map<String, dynamic>>('/auth/user');
-      
-      if (response.isSuccess && response.data != null) {
-        _currentUser = User.fromJson(response.data!);
-        
-        // Actualizar datos guardados
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_userKey, jsonEncode(_currentUser!.toJson()));
-        
+      final prefs = await SharedPreferences.getInstance();
+      final userData = prefs.getString(_userKey);
+
+      if (userData != null) {
+        _currentUser = User.fromJson(jsonDecode(userData));
         return _currentUser;
       }
     } catch (e) {
-      debugPrint('Get current user error: $e');
+      debugPrint('❌ Error obteniendo usuario: $e');
     }
 
-    return _currentUser;
-  }
-
-  // Guardar datos de autenticación
-  Future<void> _saveAuthData(
-    String token,
-    String refreshToken,
-    Map<String, dynamic> userData,
-  ) async {
-    final prefs = await SharedPreferences.getInstance();
-    await Future.wait([
-      prefs.setString(_tokenKey, token),
-      prefs.setString(_refreshTokenKey, refreshToken),
-      prefs.setString(_userKey, jsonEncode(userData)),
-      prefs.setString(_lastLoginKey, DateTime.now().toIso8601String()),
-    ]);
-  }
-
-  // Limpiar datos de autenticación
-  Future<void> _clearAuthData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await Future.wait([
-      prefs.remove(_tokenKey),
-      prefs.remove(_refreshTokenKey),
-      prefs.remove(_userKey),
-      prefs.remove(_lastLoginKey),
-    ]);
-  }
-
-  // Obtener información del dispositivo
-  Future<Map<String, dynamic>> _getDeviceInfo() async {
-    // TODO: Implementar obtención real de info del dispositivo
-    return {
-      'platform': defaultTargetPlatform.name,
-      'app_version': '1.0.0',
-      'device_id': 'device_${DateTime.now().millisecondsSinceEpoch}',
-    };
-  }
-
-  // Obtener último login
-  Future<DateTime?> getLastLogin() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final lastLoginStr = prefs.getString(_lastLoginKey);
-      if (lastLoginStr != null) {
-        return DateTime.parse(lastLoginStr);
-      }
-    } catch (e) {
-      debugPrint('Error getting last login: $e');
-    }
     return null;
   }
 
-  // Verificar si la sesión ha expirado por tiempo
-  Future<bool> isSessionExpired() async {
-    final lastLogin = await getLastLogin();
-    if (lastLogin == null) return true;
-
-    const sessionTimeout = Duration(hours: 8); // 8 horas de sesión
-    return DateTime.now().difference(lastLogin) > sessionTimeout;
+  // Verificación de permisos
+  bool hasPermission(String permission) {
+    if (_currentUser == null) return false;
+    return _currentUser!.hasPermission(permission);
   }
 
-  // Login offline (para casos de emergencia)
-  Future<AuthResult> offlineLogin(String username, String password) async {
+  bool hasRole(UserRole role) {
+    if (_currentUser == null) return false;
+    return _currentUser!.hasRole(role);
+  }
+
+  // Guardar sesión
+  Future<void> _saveSession(User user, String token) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final lastUserData = prefs.getString(_userKey);
-      
-      if (lastUserData != null) {
-        final userData = jsonDecode(lastUserData) as Map<String, dynamic>;
-        final lastUser = User.fromJson(userData);
-        
-        // Verificación simple (en producción usar hash)
-        if (lastUser.username == username) {
-          _currentUser = lastUser;
-          _isAuthenticated = true;
-          
-          return AuthResult.success(_currentUser!);
-        }
-      }
-      
-      return AuthResult.failure('Credenciales offline no disponibles');
+
+      await prefs.setString(_userKey, jsonEncode(user.toJson()));
+      await prefs.setString(_tokenKey, token);
+      await prefs.setString('last_login', DateTime.now().toIso8601String());
+
+      debugPrint('✅ Sesión guardada');
     } catch (e) {
-      debugPrint('Offline login error: $e');
-      return AuthResult.failure('Error en login offline');
+      debugPrint('❌ Error guardando sesión: $e');
     }
-  }
-}
-
-// Clase para resultados de autenticación
-class AuthResult {
-  final bool isSuccess;
-  final User? user;
-  final String? error;
-
-  AuthResult._({
-    required this.isSuccess,
-    this.user,
-    this.error,
-  });
-
-  factory AuthResult.success(User user) {
-    return AuthResult._(isSuccess: true, user: user);
-  }
-
-  factory AuthResult.failure(String error) {
-    return AuthResult._(isSuccess: false, error: error);
-  }
-}
-
-// Interceptor para manejar renovación automática de tokens
-class AuthInterceptor {
-  final AuthService _authService = AuthService();
-
-  Future<bool> handleUnauthorized() async {
-    // Intentar refrescar token
-    final refreshed = await _authService.refreshToken();
-    
-    if (!refreshed) {
-      // Si no se puede refrescar, cerrar sesión
-      await _authService.logout();
-      return false;
-    }
-    
-    return true;
   }
 }

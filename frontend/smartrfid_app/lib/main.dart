@@ -5,11 +5,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 // Services
 import 'services/api_service.dart';
-import 'services/auth_service.dart';
+import 'services/auth_service.dart' as auth_service;
 import 'services/inventory_service.dart';
+import 'services/database_service.dart';
 
 // Providers
 import 'providers/inventory_provider.dart';
+import 'providers/auth_provider.dart';
 
 import 'models/user.dart';
 
@@ -29,13 +31,23 @@ import 'utils/constants.dart';
 void main() async {
   // Asegurar que los bindings estén inicializados
   WidgetsFlutterBinding.ensureInitialized();
-  
+
+  // ✅ AÑADIR: Inicializar base de datos ANTES que todo
+  debugPrint('🗄️ Inicializando base de datos...');
+  try {
+    final dbService = DatabaseService();
+    await dbService.database; // Esto creará las tablas
+    debugPrint('✅ Base de datos inicializada correctamente');
+  } catch (e) {
+    debugPrint('❌ Error inicializando base de datos: $e');
+  }
+
   // Configurar orientación de pantalla
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  
+
   // Configurar UI del sistema
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -45,18 +57,19 @@ void main() async {
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
-  
+
   // Inicializar SharedPreferences
   final prefs = await SharedPreferences.getInstance();
-  
+
   // Crear instancias de servicios
   final apiService = ApiService();
-  final authService = AuthService();
+  final auth_service.AuthService authService = auth_service.AuthService();
   final inventoryService = InventoryService();
-  
-  // Inicializar servicio de autenticación
+
+  // ✅ CAMBIAR: Inicializar servicio de autenticación DESPUÉS de DB
+  debugPrint('🔐 Inicializando servicio de autenticación...');
   await authService.initialize();
-  
+
   runApp(SmartRFIDApp(
     apiService: apiService,
     authService: authService,
@@ -67,7 +80,7 @@ void main() async {
 
 class SmartRFIDApp extends StatelessWidget {
   final ApiService apiService;
-  final AuthService authService;
+  final auth_service.AuthService authService;
   final InventoryService inventoryService;
   final SharedPreferences prefs;
 
@@ -84,9 +97,15 @@ class SmartRFIDApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider<ApiService>.value(value: apiService),
-        Provider<AuthService>.value(value: authService),
+        Provider<auth_service.AuthService>.value(value: authService),
         Provider<InventoryService>.value(value: inventoryService),
         Provider<SharedPreferences>.value(value: prefs),
+
+        // ✅ AÑADIR AuthProvider
+        ChangeNotifierProvider<AuthProvider>(
+          create: (context) => AuthProvider(authService),
+        ),
+
         ChangeNotifierProvider<InventoryProvider>(
           create: (context) => InventoryProvider(inventoryService),
         ),
@@ -94,18 +113,18 @@ class SmartRFIDApp extends StatelessWidget {
       child: MaterialApp(
         title: AppConstants.appName,
         debugShowCheckedModeBanner: DebugConstants.showDebugBanner,
-        
+
         theme: _buildLightTheme(),
         darkTheme: FeatureFlags.enableDarkMode ? _buildDarkTheme() : null,
         themeMode: ThemeMode.system,
-        
+
         // ✅ OPCIÓN 2: Usar initialRoute en lugar de home
         initialRoute: authService.isAuthenticated ? AppRoutes.home : AppRoutes.login,
-        
+
         routes: _buildRoutes(),
         onGenerateRoute: _onGenerateRoute,
         onUnknownRoute: _onUnknownRoute,
-        
+
         builder: (context, child) {
           return _AppWrapper(child: child);
         },
@@ -146,13 +165,13 @@ class SmartRFIDApp extends StatelessWidget {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      
+
       // Esquema de colores
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primary,
         brightness: Brightness.light,
       ),
-      
+
       // AppBar
       appBarTheme: const AppBarTheme(
         elevation: 0,
@@ -161,7 +180,7 @@ class SmartRFIDApp extends StatelessWidget {
         foregroundColor: Colors.white,
         systemOverlayStyle: SystemUiOverlayStyle.light,
       ),
-      
+
       // Botones elevados
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -173,7 +192,7 @@ class SmartRFIDApp extends StatelessWidget {
           textStyle: AppTextStyles.button,
         ),
       ),
-      
+
       // Botones de texto
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
@@ -184,7 +203,7 @@ class SmartRFIDApp extends StatelessWidget {
           textStyle: AppTextStyles.button,
         ),
       ),
-      
+
       // Botones outlined
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
@@ -195,7 +214,7 @@ class SmartRFIDApp extends StatelessWidget {
           textStyle: AppTextStyles.button,
         ),
       ),
-      
+
       // Campos de entrada
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -218,7 +237,7 @@ class SmartRFIDApp extends StatelessWidget {
         ),
         contentPadding: const EdgeInsets.all(UIConstants.paddingMD),
       ),
-      
+
       // Cards
       cardTheme: CardThemeData(
         elevation: UIConstants.elevationLow,
@@ -227,14 +246,14 @@ class SmartRFIDApp extends StatelessWidget {
         ),
         margin: const EdgeInsets.all(UIConstants.paddingSM),
       ),
-      
+
       // FAB
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         elevation: UIConstants.elevationMedium,
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
-      
+
       // BottomNavigationBar
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         type: BottomNavigationBarType.fixed,
@@ -243,20 +262,20 @@ class SmartRFIDApp extends StatelessWidget {
         unselectedItemColor: AppColors.grey600,
         backgroundColor: Colors.white,
       ),
-      
+
       // Drawer
       drawerTheme: const DrawerThemeData(
         elevation: UIConstants.elevationHigh,
         backgroundColor: Colors.white,
       ),
-      
+
       // Dividers
       dividerTheme: const DividerThemeData(
         color: AppColors.grey300,
         thickness: 1,
         space: 1,
       ),
-      
+
       // Text theme
       textTheme: const TextTheme(
         displayLarge: AppTextStyles.headline1,
@@ -278,12 +297,12 @@ class SmartRFIDApp extends StatelessWidget {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      
+
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primary,
         brightness: Brightness.dark,
       ),
-      
+
       appBarTheme: const AppBarTheme(
         elevation: 0,
         centerTitle: true,
@@ -321,17 +340,15 @@ class AuthGuard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    
-    // ✅ CORREGIDO: Usar getter en lugar de Future
+    final authService = Provider.of<auth_service.AuthService>(context, listen: false);
+
     if (!authService.isAuthenticated) {
-      // Redirigir al login si no está autenticado
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.of(context).pushReplacementNamed(AppRoutes.login);
       });
       return const SizedBox.shrink();
     }
-    
+
     return child;
   }
 }
@@ -369,9 +386,9 @@ class SplashScreen extends StatelessWidget {
                 color: AppColors.primary,
               ),
             ),
-            
+
             const SizedBox(height: UIConstants.paddingXL),
-            
+
             Text(
               AppConstants.appName,
               style: AppTextStyles.headline1.copyWith(
@@ -379,24 +396,24 @@ class SplashScreen extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            
+
             const SizedBox(height: UIConstants.paddingSM),
-            
+
             Text(
               AppConstants.companyName,
               style: AppTextStyles.bodyLarge.copyWith(
                 color: Colors.white.withOpacity(0.8),
               ),
             ),
-            
+
             const SizedBox(height: UIConstants.paddingXL * 2),
-            
+
             const CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
             ),
-            
+
             const SizedBox(height: UIConstants.paddingMD),
-            
+
             Text(
               'Inicializando...',
               style: AppTextStyles.bodyMedium.copyWith(
@@ -429,9 +446,9 @@ class NotFoundScreen extends StatelessWidget {
               size: UIConstants.iconXL * 2,
               color: AppColors.grey400,
             ),
-            
+
             const SizedBox(height: UIConstants.paddingLG),
-            
+
             Text(
               '404',
               style: AppTextStyles.headline1.copyWith(
@@ -440,18 +457,18 @@ class NotFoundScreen extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            
+
             const SizedBox(height: UIConstants.paddingMD),
-            
+
             Text(
               'Página no encontrada',
               style: AppTextStyles.headline3.copyWith(
                 color: AppColors.grey600,
               ),
             ),
-            
+
             const SizedBox(height: UIConstants.paddingSM),
-            
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: UIConstants.paddingLG),
               child: Text(
@@ -462,9 +479,9 @@ class NotFoundScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
             ),
-            
+
             const SizedBox(height: UIConstants.paddingXL),
-            
+
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pushNamedAndRemoveUntil(
@@ -490,16 +507,16 @@ class DebugInfo extends StatelessWidget {
     if (!DebugConstants.enableDebugLogs) {
       return const SizedBox.shrink();
     }
-    
-    final authService = Provider.of<AuthService>(context, listen: false);
-    
+
+    final authService = Provider.of<auth_service.AuthService>(context, listen: false);
+
     return Consumer<InventoryProvider>(
       builder: (context, inventoryProvider, child) {
         return FutureBuilder<User?>(
           future: authService.getCurrentUser(),
           builder: (context, snapshot) {
             final user = snapshot.data;
-            
+
             return Positioned(
               top: MediaQuery.of(context).padding.top + 10,
               right: 10,
@@ -539,8 +556,7 @@ class DebugInfo extends StatelessWidget {
                     ),
                   ],
                 ),
-              ),
-            );
+              ));
           },
         );
       },

@@ -1,66 +1,88 @@
-enum UserRole {
-  operator,
-  supervisor,
-  manager,
-  admin
-}
+import 'dart:convert';
+
+enum UserRole { ADMIN, MANAGER, OPERATOR, VIEWER }
 
 class User {
   final String id;
   final String username;
+  final String email;
   final String firstName;
   final String lastName;
-  final String email;
   final UserRole role;
   final List<String> permissions;
-  final List<String>? allowedAreas; // Áreas permitidas
   final bool isActive;
+  final DateTime createdAt;
   final DateTime? lastLogin;
-  final DateTime? createdAt;
-  final DateTime? updatedAt;
 
   User({
     required this.id,
     required this.username,
+    required this.email,
     required this.firstName,
     required this.lastName,
-    required this.email,
     required this.role,
-    this.permissions = const [],
-    this.allowedAreas,
+    required this.permissions,
     this.isActive = true,
+    required this.createdAt,
     this.lastLogin,
-    this.createdAt,
-    this.updatedAt,
   });
 
+  // Getters calculados
+  String get fullName => '$firstName $lastName';
+
+  String get roleDisplayName {
+    switch (role) {
+      case UserRole.ADMIN:
+        return 'Administrador';
+      case UserRole.MANAGER:
+        return 'Gerente';
+      case UserRole.OPERATOR:
+        return 'Operador';
+      case UserRole.VIEWER:
+        return 'Consultor';
+    }
+  }
+
+  // From API JSON
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
-      id: json['id'],
+      id: json['id'] ?? json['uuid'],
       username: json['username'],
-      firstName: json['first_name'],
-      lastName: json['last_name'],
       email: json['email'],
+      firstName: json['first_name'] ?? json['firstName'] ?? 'Usuario',
+      lastName: json['last_name'] ?? json['lastName'] ?? '',
       role: UserRole.values.firstWhere(
-        (e) => e.name == json['role'],
-        orElse: () => UserRole.operator,
+        (e) => e.toString().split('.').last == json['role'],
+        orElse: () => UserRole.VIEWER,
       ),
-      permissions: json['permissions'] != null 
-          ? List<String>.from(json['permissions']) 
-          : [],
-      allowedAreas: json['allowed_areas'] != null 
-          ? List<String>.from(json['allowed_areas']) 
-          : null,
-      isActive: json['is_active'] ?? true,
-      lastLogin: json['last_login'] != null 
-          ? DateTime.parse(json['last_login']) 
-          : null,
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at']) 
-          : null,
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at']) 
-          : null,
+      permissions: List<String>.from(
+        json['permissions'] is String
+          ? jsonDecode(json['permissions'])
+          : json['permissions'] ?? []
+      ),
+      isActive: json['is_active'] == 1 || json['is_active'] == true,
+      createdAt: DateTime.parse(json['created_at']),
+      lastLogin: json['last_login'] != null
+        ? DateTime.parse(json['last_login'])
+        : null,
+    );
+  }
+
+  // From SQLite
+  factory User.fromDatabaseJson(Map<String, dynamic> json) {
+    return User(
+      id: json['uuid'],
+      username: json['username'],
+      email: json['email'],
+      firstName: json['first_name'] ?? 'Usuario',
+      lastName: json['last_name'] ?? '',
+      role: UserRole.values.firstWhere(
+        (e) => e.toString().split('.').last == json['role'],
+        orElse: () => UserRole.VIEWER,
+      ),
+      permissions: List<String>.from(jsonDecode(json['permissions'])),
+      isActive: json['is_active'] == 1,
+      createdAt: DateTime.parse(json['created_at']),
     );
   }
 
@@ -68,53 +90,22 @@ class User {
     return {
       'id': id,
       'username': username,
+      'email': email,
       'first_name': firstName,
       'last_name': lastName,
-      'email': email,
-      'role': role.name,
+      'role': role.toString().split('.').last,
       'permissions': permissions,
-      'allowed_areas': allowedAreas,
       'is_active': isActive,
+      'created_at': createdAt.toIso8601String(),
       'last_login': lastLogin?.toIso8601String(),
-      'created_at': createdAt?.toIso8601String(),
-      'updated_at': updatedAt?.toIso8601String(),
     };
   }
 
-  String get fullName => '$firstName $lastName';
-  
-  String get roleDisplayName {
-    switch (role) {
-      case UserRole.operator:
-        return 'Operador';
-      case UserRole.supervisor:
-        return 'Supervisor';
-      case UserRole.manager:
-        return 'Gerente';
-      case UserRole.admin:
-        return 'Administrador';
-    }
-  }
-
   bool hasPermission(String permission) {
-    return permissions.contains(permission) || role == UserRole.admin;
+    return permissions.contains(permission);
   }
 
-  bool canAccessArea(String area) {
-    return allowedAreas == null || allowedAreas!.contains(area) || role == UserRole.admin;
+  bool hasRole(UserRole requiredRole) {
+    return role == requiredRole;
   }
-
-  @override
-  String toString() {
-    return '$fullName ($username)';
-  }
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is User && other.id == id;
-  }
-
-  @override
-  int get hashCode => id.hashCode;
 }
