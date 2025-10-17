@@ -23,11 +23,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-
-    // Solo en debug - inspeccionar DB
-    if (kDebugMode) {
-      DatabaseInspector.inspectDatabase();
-    }
   }
 
   @override

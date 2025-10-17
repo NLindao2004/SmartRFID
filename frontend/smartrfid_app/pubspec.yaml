@@ -51,8 +51,8 @@ dependencies:
 
   # Camera & Barcode Scanning
   camera: ^0.10.5+9
-  mobile_scanner: ^3.5.7
-  qr_code_scanner: ^1.0.1
+  #qr_code_scanner: ^1.0.1
+  mobile_scanner: ^7.1.2
 
   # UI Components
   flutter_svg: ^2.0.9
@@ -70,7 +70,7 @@ dependencies:
   convert: ^3.1.1
 
   # File Handling
-  file_picker: ^6.1.1
+  file_picker: ^10.3.3
   open_file: ^3.3.2
   path_provider: ^2.1.2
 

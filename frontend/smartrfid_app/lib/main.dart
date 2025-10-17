@@ -8,6 +8,7 @@ import 'services/api_service.dart';
 import 'services/auth_service.dart' as auth_service;
 import 'services/inventory_service.dart';
 import 'services/database_service.dart';
+import 'services/hive_service.dart';  // ✅ AÑADIR
 
 // Providers
 import 'providers/inventory_provider.dart';
@@ -29,26 +30,19 @@ import 'screens/settings_screen.dart';
 import 'utils/constants.dart';
 
 void main() async {
-  // Asegurar que los bindings estén inicializados
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ AÑADIR: Inicializar base de datos ANTES que todo
-  debugPrint('🗄️ Inicializando base de datos...');
-  try {
-    final dbService = DatabaseService();
-    await dbService.database; // Esto creará las tablas
-    debugPrint('✅ Base de datos inicializada correctamente');
-  } catch (e) {
-    debugPrint('❌ Error inicializando base de datos: $e');
-  }
+  // ✅ PASO 1: Inicializar Hive PRIMERO
+  debugPrint('🗄️ Inicializando Hive...');
+  await HiveService.init();
 
-  // Configurar orientación de pantalla
+  // ✅ PASO 2: Configurar orientación
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  // Configurar UI del sistema
+  // ✅ PASO 3: Configurar UI
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -58,15 +52,15 @@ void main() async {
     ),
   );
 
-  // Inicializar SharedPreferences
+  // ✅ PASO 4: Inicializar SharedPreferences
   final prefs = await SharedPreferences.getInstance();
 
-  // Crear instancias de servicios
+  // ✅ PASO 5: Crear servicios
   final apiService = ApiService();
   final auth_service.AuthService authService = auth_service.AuthService();
   final inventoryService = InventoryService();
 
-  // ✅ CAMBIAR: Inicializar servicio de autenticación DESPUÉS de DB
+  // ✅ PASO 6: Inicializar AuthService
   debugPrint('🔐 Inicializando servicio de autenticación...');
   await authService.initialize();
 

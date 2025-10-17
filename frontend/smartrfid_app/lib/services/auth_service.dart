@@ -2,14 +2,13 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
-import 'api_service.dart';
+import '../repositories/user_repository.dart';
 
 class AuthService {
   static const String _tokenKey = 'auth_token';
-  static const String _refreshTokenKey = 'refresh_token';
   static const String _userKey = 'user_data';
 
-  final ApiService _apiService = ApiService();
+  final UserRepository _userRepository = UserRepository();
 
   User? _currentUser;
   String? _currentToken;
@@ -20,12 +19,12 @@ class AuthService {
   bool get isAuthenticated => _isAuthenticated;
   String? get token => _currentToken;
 
-  // Inicializar el servicio
+  /// Inicializar servicio
   Future<void> initialize() async {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Verificar sesión guardada
+      // Restaurar sesión guardada
       final userData = prefs.getString(_userKey);
       final token = prefs.getString(_tokenKey);
 
@@ -36,104 +35,51 @@ class AuthService {
 
         debugPrint('✅ Sesión restaurada: ${_currentUser?.username}');
       } else {
-        debugPrint('❌ No hay sesión guardada');
+        debugPrint('ℹ️ No hay sesión guardada');
       }
     } catch (e) {
-      debugPrint('❌ Error inicializando auth: $e');
+      debugPrint('❌ Error inicializando AuthService: $e');
     }
   }
 
-  // Login - Para web usaremos usuarios hardcodeados
+  /// Login usando Hive
   Future<User?> login(String username, String password) async {
     try {
       debugPrint('🔐 Intentando login: $username');
 
-      // Usuarios hardcodeados para desarrollo web
-      final users = _getHardcodedUsers();
+      // Usar repositorio para verificar credenciales
+      final user = await _userRepository.login(username, password);
 
-      for (final userData in users) {
-        if (userData['username'] == username &&
-            _verifyPassword(password, userData['password_hash'])) {
+      if (user != null) {
+        _currentUser = user;
+        _isAuthenticated = true;
 
-          final user = User.fromDatabaseJson(userData);
-          _currentUser = user;
-          _isAuthenticated = true;
+        // Generar token
+        _currentToken = 'hive_token_${user.uuid}_${DateTime.now().millisecondsSinceEpoch}';
 
-          // Generar token para desarrollo
-          _currentToken = 'web_token_${user.id}_${DateTime.now().millisecondsSinceEpoch}';
+        // Guardar sesión
+        await _saveSession(user, _currentToken!);
 
-          // Guardar sesión
-          await _saveSession(user, _currentToken!);
-
-          debugPrint('✅ Login exitoso: ${user.username}');
-          return user;
-        }
+        debugPrint('✅ Login exitoso: ${user.username} (${user.role})');
+        return user;
       }
 
       debugPrint('❌ Credenciales incorrectas');
       return null;
-
     } catch (e) {
       debugPrint('❌ Error en login: $e');
       return null;
     }
   }
 
-  // Usuarios hardcodeados para web
-  List<Map<String, dynamic>> _getHardcodedUsers() {
-    final now = DateTime.now().toIso8601String();
-
-    return [
-      {
-        'uuid': 'admin-uuid-123',
-        'username': 'admin',
-        'email': 'admin@massline.com',
-        'first_name': 'Administrador',
-        'last_name': 'Sistema',
-        'password_hash': _hashPassword('admin123'),
-        'role': 'ADMIN',
-        'permissions': '["inventory_read","inventory_write","reports","user_management","rfid_commission"]',
-        'is_active': 1,
-        'created_at': now,
-        'updated_at': now,
-      },
-      {
-        'uuid': 'operator-uuid-456',
-        'username': 'operator',
-        'email': 'operator@massline.com',
-        'first_name': 'Operador',
-        'last_name': 'Bodega',
-        'password_hash': _hashPassword('operator123'),
-        'role': 'OPERATOR',
-        'permissions': '["inventory_read","inventory_write"]',
-        'is_active': 1,
-        'created_at': now,
-        'updated_at': now,
-      },
-    ];
-  }
-
-  // Verificar contraseña
-  bool _verifyPassword(String password, String hash) {
-    return _hashPassword(password) == hash;
-  }
-
-  // Hash simple para desarrollo
-  String _hashPassword(String password) {
-    return password.hashCode.toString();
-  }
-
-  // Logout
+  /// Logout
   Future<void> logout() async {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Limpiar datos locales
       await prefs.remove(_userKey);
       await prefs.remove(_tokenKey);
-      await prefs.remove(_refreshTokenKey);
 
-      // Limpiar estado
       _currentUser = null;
       _currentToken = null;
       _isAuthenticated = false;
@@ -144,13 +90,12 @@ class AuthService {
     }
   }
 
-  // ✅ Método getCurrentUser que necesitan las pantallas
+  /// Obtener usuario actual
   Future<User?> getCurrentUser() async {
     if (_currentUser != null) {
       return _currentUser;
     }
 
-    // Intentar cargar desde SharedPreferences
     try {
       final prefs = await SharedPreferences.getInstance();
       final userData = prefs.getString(_userKey);
@@ -166,25 +111,23 @@ class AuthService {
     return null;
   }
 
-  // Verificación de permisos
+  /// Verificar permiso
   bool hasPermission(String permission) {
-    if (_currentUser == null) return false;
-    return _currentUser!.hasPermission(permission);
+    return _currentUser?.hasPermission(permission) ?? false;
   }
 
+  /// Verificar rol
   bool hasRole(UserRole role) {
-    if (_currentUser == null) return false;
-    return _currentUser!.hasRole(role);
+    return _currentUser?.hasRole(role) ?? false;
   }
 
-  // Guardar sesión
+  /// Guardar sesión
   Future<void> _saveSession(User user, String token) async {
     try {
       final prefs = await SharedPreferences.getInstance();
 
       await prefs.setString(_userKey, jsonEncode(user.toJson()));
       await prefs.setString(_tokenKey, token);
-      await prefs.setString('last_login', DateTime.now().toIso8601String());
 
       debugPrint('✅ Sesión guardada');
     } catch (e) {
