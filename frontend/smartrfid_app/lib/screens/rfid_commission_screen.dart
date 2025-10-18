@@ -78,7 +78,7 @@ class _RFIDCommissionScreenState extends State<RFIDCommissionScreen> with Ticker
     return Scaffold(
       appBar: AppBar(
         title: const Text('RFID Commission'),
-        backgroundColor: Colors.teal.shade100,
+        backgroundColor: const Color.fromARGB(255, 233, 52, 52),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [

@@ -67,7 +67,7 @@ class _QueryScreenState extends State<QueryScreen> with TickerProviderStateMixin
     return Scaffold(
       appBar: AppBar(
         title: const Text('Consultas'),
-        backgroundColor: Colors.purple.shade100,
+        backgroundColor: const Color.fromARGB(255, 233, 52, 52),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [

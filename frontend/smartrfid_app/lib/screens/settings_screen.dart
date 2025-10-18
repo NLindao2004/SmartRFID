@@ -53,7 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Configuraciones'),
-        backgroundColor: Colors.grey.shade100,
+        backgroundColor: const Color.fromARGB(255, 233, 52, 52),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

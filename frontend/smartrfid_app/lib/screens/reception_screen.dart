@@ -74,7 +74,7 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Recepción'),
-        backgroundColor: Colors.green.shade100,
+        backgroundColor: const Color.fromARGB(255, 233, 52, 52),
         actions: [
           Switch(
             value: _useRFID,

@@ -58,7 +58,7 @@ class _CountScreenState extends State<CountScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Conteos'),
-        backgroundColor: Colors.orange.shade100,
+        backgroundColor: const Color.fromARGB(255, 233, 52, 52),
         actions: [
           Switch(
             value: _useRFID,

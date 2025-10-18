@@ -63,7 +63,7 @@ class _MovementScreenState extends State<MovementScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Movimientos'),
-        backgroundColor: Colors.blue.shade100,
+        backgroundColor: const Color.fromARGB(255, 233, 52, 52),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

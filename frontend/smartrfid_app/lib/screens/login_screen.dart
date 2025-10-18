@@ -59,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: 80,
                           height: 80,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1976D2),
+                            color: const Color.fromARGB(255, 241, 21, 21),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: const Icon(
@@ -76,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1976D2),
+                            color: Color.fromARGB(255, 241, 21, 21),
                           ),
                         ),
                         const Text(
@@ -147,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _login,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1976D2),
+                              backgroundColor: const Color.fromARGB(255, 241, 21, 21),
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
